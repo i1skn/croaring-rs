@@ -4,6 +4,27 @@ extern crate cc;
 use std::env;
 use std::path::PathBuf;
 
+fn sdk_path(target: &str) -> Result<Option<String>, std::io::Error> {
+    use std::process::Command;
+
+    let sdk = if target.contains("apple-darwin") {
+        "macosx"
+    } else if target == "x86_64-apple-ios" || target == "i386-apple-ios" {
+        "iphonesimulator"
+    } else if target == "aarch64-apple-ios" {
+        "iphoneos"
+    } else {
+        return Ok(None);
+    };
+
+    let output = Command::new("xcrun")
+        .args(&["--sdk", sdk, "--show-sdk-path"])
+        .output()?
+        .stdout;
+    let prefix_str = std::str::from_utf8(&output).expect("invalid output from `xcrun`");
+    Ok(Some(prefix_str.trim_end().to_string()))
+}
+
 fn main() {
     let mut build = cc::Build::new();
     build.file("CRoaring/roaring.c");
@@ -20,12 +41,17 @@ fn main() {
 
     build.compile("libroaring.a");
 
-    let bindings = bindgen::Builder::default()
+    let target = std::env::var("TARGET").unwrap();
+
+    let mut builder = bindgen::Builder::default()
         .blacklist_type("max_align_t")
         .header("CRoaring/roaring.h")
-        .generate_inline_functions(true)
-        .generate()
-        .expect("Unable to generate bindings");
+        .generate_inline_functions(true);
+    if let Some(sdk_path) = sdk_path(&target).unwrap() {
+        builder = builder.clang_args(&["-isysroot", &sdk_path]);
+    }
+
+    let bindings = builder.generate().expect("Unable to generate bindings");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
