@@ -50,6 +50,10 @@ fn main() {
     if let Some(sdk_path) = sdk_path(&target).unwrap() {
         builder = builder.clang_args(&["-isysroot", &sdk_path]);
     }
+    if target == "aarch64-linux-android" {
+        // disable NEON for aarch64-linux-android
+        builder = builder.clang_arg("-DDISABLENEON");
+    }
 
     let bindings = builder.generate().expect("Unable to generate bindings");
 
